@@ -1,0 +1,4 @@
+kirka-api/auth.json
+kirka-api/catalog.json
+__pycache__/
+*.pyc

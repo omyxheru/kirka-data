@@ -1,0 +1,39 @@
+# Always-on daily Kirka capture - runs in GitHub's cloud, no PC or phone needed.
+# Archives the leaderboards (top players / clans), players-online, news, shop, votes, etc. and commits the data +
+# a dated report back to the repo. The core data is public, so this needs NO secrets. (Optional: add a KIRKA_REFRESH
+# secret to also capture the login-only quests + community maps.)
+name: Kirka daily
+
+on:
+  schedule:
+    - cron: '5 */6 * * *'      # every 6 hours (idempotent: one leaderboard snapshot per day, latest wins)
+  workflow_dispatch: {}         # and a manual "Run" button
+
+permissions:
+  contents: write               # so it can commit the captured data back
+
+concurrency:
+  group: kirka-daily
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Capture Kirka data
+        env:
+          KIRKA_REFRESH: ${{ secrets.KIRKA_REFRESH }}   # optional; leave unset to capture public data only
+        run: python tools/daily.py --cloud
+      - name: Commit the day's data
+        run: |
+          git config user.name  "kirka-bot"
+          git config user.email "kirka-bot@users.noreply.github.com"
+          # only the reports and the site's data feeds - never the auth file or the big catalogue snapshot
+          git add reports skin-library/public/*.json 2>/dev/null || true
+          git reset -- kirka-api/auth.json 2>/dev/null || true
+          git commit -m "Kirka data $(date -u +%Y-%m-%d\ %H:%M)" || echo "nothing to commit"
+          git push || echo "push skipped"
