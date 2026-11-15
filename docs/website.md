@@ -16,14 +16,21 @@ Create / More. Routing in `src/lib/router.ts`, pages wired in `src/App.tsx`, sid
 - **Deal Radar** (`/deals`) - deal finder.
 - **Live** (`/live`) - live global chat + trade offers (`wss://chat.kirka.io`).
 - **Players** (`/player`) - look up a player's profile + inventory value (Kirka Hub).
-- **Clans** (`/clans`) - clan lookup: roster, scores, war position.
+- **Clans** (`/clans`) - rich clan profile: war rank, this-month + all-time score, and the **full roster with each member's join date (retroactive), role and monthly contribution**, sortable by all-time / month / newest / role, plus newest + longest-serving member. Join/leave *over time* layers in from our DB (`memberships`) as it accumulates.
 - **Leaderboards** (`/leaderboard`) - solo + clan + ranked boards (live).
 - **Traders** (`/traders`) - top traders by volume/trades/profit/net worth; click any for their full trade log,
   profit, best/worst trades, partners, account + inventory net worth. Built from Luke's 2023+ trade archive; archived
   daily into `kirka.db` (`trader_daily`) for net-worth/profit-over-time.
 - **Quests** (`/quests`) - hourly/daily/event quests with rewards (global, same for everyone).
 - **Shop** (`/shop`) - the in-game shop: sets, bundles, coin/gem packs, character cards expanded to their characters.
-- **Games** (`/games`) - live matches per region with map preview, mode, players, join link.
+- **Games** (`/games`) - live matches per region. Each opens a **room-detail panel**: mode, map (image), the
+  custom map's **author / plays / likes** (linked from our maps data), a **live match timer** counting up from the
+  round start, win condition (score/kill/round cap) + time limit, access rules (open / login-only / min-level,
+  **Ranked** flagged), team layout, server + room id, and a join button. All read-only from the room metadata. When we've **spectated**
+  a room (`tools/room.py`), the panel also shows its **live roster** - every player with K/D/score and short-id
+  (bots flagged), captured non-intrusively by watching, archived to `kirka.db` (`match_roster`). A **Request info** button pulls the
+  roster live on demand for any room (`tools/roomserver.py` bridge -> spectate -> headless socket decode -> team,
+  K/D, score, live HP).
 
 ### More
 - **Players Online** (`/online`) - live per-region counts + 7-day trend chart + per-region sparklines.
@@ -45,7 +52,7 @@ Most pages read a captured `public/*.json` (so a published build works offline) 
 where CORS allows. See `skin-library/DATA.md` for the exact source per page and the refresh commands.
 
 ## Not yet built (next up)
-- **Player profile page** with history (rank over time, clan timeline, daily/weekly/monthly/all-time) from `kirka.db`.
+- **Player profile page** with history (rank over time, clan timeline, daily/weekly/monthly/all-time) from `kirka.db`. (Clan profile done; player next.)
 - **Clan page** with roster history + join/leave + transfer/poaching graph.
 - **Period leaderboards** (week/month/most-improved).
 - **The HTTP API** over `kirka.db` (`/player/<id>`, `/clan/<name>`, `/top?period=...`).

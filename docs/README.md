@@ -20,6 +20,7 @@ The goal: our own Kirka stats API/product, built on accumulated history.
 | [findings.md](findings.md) | Every Kirka API / data source we found, how it works, access notes, and bugs found |
 | [pipeline.md](pipeline.md) | The capture tools, the database schema, the daily automation and cloud deploy |
 | [website.md](website.md) | Every page on the site and what it shows |
+| [kirka-everything.md](kirka-everything.md) | **The full deep reference** - every API, the live game socket protocol, the Colyseus schema format, every decoded field/message, bugs, access, tools. Nothing left out. |
 
 ## Other reference (detailed)
 - `skin-library/DATA.md` - which source feeds which page; refresh commands.

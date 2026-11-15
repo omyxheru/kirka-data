@@ -17,6 +17,10 @@ All stdlib Python (urllib + sqlite3), so they run anywhere including the cloud.
 | `auth.py` | stored login (Xsolla refresh), so token tools work without a browser | - | `kirka-api/auth.json` (gitignored) |
 | `daily.py` | orchestrates all of the above + writes `reports/<date>.md` | - | the daily report |
 | `cdp.py` | drives the debug Chrome over port 9222 (one-time login capture, etc.) | - | - |
+| `room.py` | the live roster of a match room, by **spectating** it (no slot taken) + archives it | spectating client | `public/rooms/<TAG>.json` + `kirka.db` |
+| `colyseus.py` | headless Colyseus decoder: msgpack (op-13 telemetry) + schema (full room state) | - | (library) |
+| `specd.py` | spectate a room, capture its socket, **headless-decode** the full roster (team/health/score) | spectating client | `public/rooms/<TAG>.json` + `kirka.db` |
+| `roomserver.py` | local HTTP bridge (:5191) for the site's **Request info** button: spectate+decode a room on demand | spectating client | JSON to the site |
 
 Login-only tools (`quests`, `maps`) use `auth.py`: the token lives in `kirka-api/auth.json` and auto-refreshes via
 Xsolla, so no browser is needed. One-time setup: `python tools/auth.py capture` (with the debug Chrome logged in).
@@ -35,6 +39,7 @@ Built by `collect.py` / `traders.py` via `statsdb.py`. Records daily state so an
 | `online` | timestamp | eu, na, sa, asia, oce, india |
 | `events` | derived event | date, player, type (join_clan/leave_clan/role_change), clan |
 | `trader_daily` | trader per day | tag, short_id, trades, volume, profit, net_worth, items, level, clan |
+| `match_roster` | player per room capture | captured_at, room, region, map, short_id, name, rank, kills, deaths, score, side, is_bot |
 | `meta` | key | last_collect_date, last_traders_date, etc. |
 
 **Deltas give everything:** a player's `player_daily` row today minus yesterday = that day's score/kills/wins; sums

@@ -32,9 +32,30 @@ names (used to decode anything after a game update). Mostly **no CORS** (needs o
 - KAT (staff only, 403 for us): create/edit quests, anti-cheat cases, game config, logs, play stats, API tokens.
 
 ### Live games - `https://<region>.kirka.io/matchmake/`
-`GET`, **CORS open, no login**. Every open match per region (eu/na/sa/asia/oceania/india): mode, map (incl. custom
-map name/id), players, max, locked, join link `kirka.io/games/<REGION>~<id>`. Fields obfuscated (decoded in
-`src/lib/games.ts`).
+`GET`, **CORS open, no login**. Colyseus. Every open match per region (eu/na/sa/asia/oceania/india). Fields
+obfuscated (decoded in `src/lib/games.ts`). Decoded room metadata (`WnWwwMm`), all read-only from the listing:
+`wMNmWwW`=mode, `wWwWmMnN`=map, `wWnMNwWm`/`wWMwWmNn`=custom map name, `wWnWMm`=custom map id (links to its
+community-map page/author), `wWMnw`=players, `wWnMNmwW`=max, `wWnWMw`=score/kill/round cap, `wWmW`=time limit (min),
+`inRound___METADATA`=round in progress, `roundCreatedAt___METADATA`=round start epoch ms (-> live match timer),
+`loggedOnly___METADATA`=login-only, `needLevel___METADATA`=min level, `wWMnWm`=team slots. Ranked = login+level
+gated. Join link `kirka.io/games/<REGION>~<id>`.
+
+**The live player roster is NOT in the listing** - only the count. The roster (names/scores) lives in the Colyseus
+room **state** (MessagePack frames, per the network capture). Colyseus has no spectator API: reading it means
+`POST /matchmake/joinById/<id>` + consuming the seat over the room websocket, which **joins the match** (our account
+briefly appears in real players' games). Intrusive, dev-authorised (xip) but gated; not built. Non-intrusive
+alternative for "who played": the match-history endpoint (`/WwMWm/wWwWmMN`, readable by shortId) gives *finished*-
+match rosters.
+
+> **OLD (2026-11-13/14):** the paragraph above: roster in "MessagePack frames", "Colyseus has no spectator API",
+> reading it means `joinById` which joins the match as a player.
+> **NEW (2026-11-15):** three corrections, all tested:
+> 1. Kirka HAS a spectator mode (`SPECTATE`/`Watch` in the room browser). A spectator takes no player slot and can't
+>    affect the match, so the roster can be read non-intrusively.
+> 2. The roster is in the Colyseus **schema** state (`@colyseus/schema` v2, binary), not MessagePack. MessagePack is only
+>    the op-13 message channel. `tools/colyseus.py` decodes both (see kirka-everything.md §4.3).
+> 3. HTTP `joinById` is disabled (`{code:4210,"invalid method joinById"}`); seats come only from the authed lobby
+>    websocket. Headless every-match sweep is PARKED by xip (2026-11-15). Full write-up: kirka-everything.md §4.5.
 
 ### Luke / KirkaTrades - `kirka.lukeskywalk.com`
 Public, **no CORS** (fetch server-side). Prices, open trades, **completed-trade archive since 2023 (929 day-files,
