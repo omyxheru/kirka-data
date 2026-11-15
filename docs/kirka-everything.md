@@ -653,3 +653,19 @@ then headless Chrome for the cloud.
 - **Result (run 3, 4 min, all 6 regions, headless):** 10 rooms at 1 min → 30 / 172 → **peak 45 of 57 listed rooms,
   244 players** live at once; 0 expired seats, 0 lobby drops. Still open: ~7 rooms answered `onAuth failed` on the
   first try (5 were TKO 20-slot, 1 a custom "ME dev" room) — cause unknown, retried after 3 min.
+
+**2026-11-15 07:38 — LIVE KILL FEED + hit stats (op-13 type 31).** The telemetry dig
+(`docs/xip-more-ideas-20261115.md`) found type 31 = one hit: `{WmwwM: victim sessionId, WmwwMWN: attacker sessionId,
+WmwwMNn: damage, WwMwN: headshot 0/1, WmwwMNWn: killed 0/1}`. The holder used to DROP all op-13; it now forwards
+type 31 only. liveall keeps per room a feed (last 30, `{t, a, aId, v, vId, dmg, hs, kill}` — names + shortIds,
+since many players are "Newbie") and per player since-we-joined counters `{dmg, hits, hs, kills, hsKills, taken}`.
+Live test (EU, 1.5 min, 16 rooms): DM Sandstorm top player 54/10 with Revolver → 38 hits, 28 headshot hits, 14 of
+15 seen kills were headshots, 1,940 dmg. live.json rooms gain `feed`; players gain `hits` and `weapon` (= weapon in
+hand; the old `weaponSkin` name was wrong, kept for compatibility). Cloud ndjson cols gain
+`dmg, hits, hsHits, hsKills, dmgTaken`. Also: our own spectator is now filtered out of rosters (`wmMNWn` flag).
+
+**2026-11-15 15:41 UTC — FIRST CLOUD RUN OK.** GitHub Action `kirka-live` (ubuntu runner, headless Chrome, 5 min):
+**51 of 55 listed rooms, 212 players, all 6 regions** (EU 14, NA 11, INDIA 10, ASIA 7, SA 6, OCEANIA 3) — better
+coverage than the PC runs. Committed `reports/live/2026-11-15.ndjson` (222 room snapshots) + `live.json`. Runs every
+30 min from now on; the kill-feed/hit-stats version goes live from the next run. Our Games page now counts
+`meta.wWMnw` (real players) instead of `WNMWnwm` (includes spectators, so our own seats inflated it).

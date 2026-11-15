@@ -17,6 +17,7 @@ Output: public/rooms/live.json (all rooms, refreshed ~2 s), per-room public/room
 match_roster archive (once a minute per room). Docs: docs/kirka-everything.md section 16.
 """
 import base64
+import msgpack
 import json
 import struct
 import pathlib
@@ -64,7 +65,8 @@ HOLDER = r"""(()=>{ if (window.__H) return true;
       ws.onmessage = (e) => { if (typeof e.data === 'string') return; const u8 = new Uint8Array(e.data); if (!u8.length) return;
         r.n++; const op = u8[0];
         if (op === 10) { r.q.push(b64(u8)); try { ws.send(new Uint8Array([10])); } catch(_){} }
-        else if (op === 14 || op === 15 || op === 11 || op === 12) r.q.push(b64(u8)); };
+        else if (op === 14 || op === 15 || op === 11 || op === 12) r.q.push(b64(u8));
+        else if (op === 13 && u8[1] === 31) r.q.push(b64(u8)); };   // type 31 = hit/kill event (kill feed)
       ws.onclose = (e) => { r.closed = true; r.code = e.code; };
       return true; },
     poll(){ const out = {}; for (const [t,r] of Object.entries(this.rooms)) { out[t] = {q:r.q, closed:r.closed, code:r.code, opened:r.opened, n:r.n}; r.q = []; if (r.closed) delete this.rooms[t]; } return out; },
@@ -207,6 +209,8 @@ class Room:
         self.dec = None; self.state = None; self.err = None
         self.t0 = time.time(); self.updated = None; self.patches = 0; self.closed = False
         self.frames = []; self.dumped = False   # raw frames kept for debugging decode errors
+        self.feed_log = []                      # last hits/kills (op-13 type 31), newest last
+        self.hits = {}                          # sessionId -> {dmg, hits, hs, kills, hsKills, taken} since we joined
 
     def dump(self, why):
         if self.dumped:
@@ -235,6 +239,8 @@ class Room:
                 if not self.err:
                     self.err = f'decode: {e}'
                     self.dump(self.err)
+        elif op == 13 and len(raw) > 2 and raw[1] == 31:
+            self.on_hit(raw)
         elif op == 11:  # Colyseus ERROR: [11, code(number), message(string)]
             try:
                 r = colyseus.Reader(raw, 1); code = colyseus.s_number(r); msg = colyseus.s_string(r)
@@ -243,11 +249,34 @@ class Room:
                 self.err = 'server error ' + raw[1:].hex()
             self.dump(self.err)
 
+    def on_hit(self, raw):
+        """op-13 type 31: {WmwwM victim sid, WmwwMWN attacker sid, WmwwMNn damage, WwMwN headshot, WmwwMNWn killed}
+        (decoded by the 2026-11-15 telemetry dig, verified 13/13 against state patches - docs/xip-more-ideas)."""
+        try:
+            ev = msgpack.unpackb(raw[2:], raw=False)
+            vic, att = ev.get('WmwwM'), ev.get('WmwwMWN')
+            dmg, hs, kill = ev.get('WmwwMNn') or 0, bool(ev.get('WwMwN')), bool(ev.get('WmwwMNWn'))
+        except Exception:  # noqa: BLE001
+            return
+        a = self.hits.setdefault(att, {'dmg': 0, 'hits': 0, 'hs': 0, 'kills': 0, 'hsKills': 0, 'taken': 0})
+        a['dmg'] += dmg; a['hits'] += 1; a['hs'] += hs; a['kills'] += kill; a['hsKills'] += hs and kill
+        self.hits.setdefault(vic, {'dmg': 0, 'hits': 0, 'hs': 0, 'kills': 0, 'hsKills': 0, 'taken': 0})['taken'] += dmg
+        names = {}
+        if self.state:
+            for p in colyseus.roster(self.state):
+                names[p.get('sessionId')] = (p.get('name'), p.get('shortId'))   # many players are "Newbie": keep shortId
+        an, asid = names.get(att, (att, None)); vn, vsid = names.get(vic, (vic, None))
+        self.feed_log.append({'t': round(time.time(), 2), 'a': an, 'aId': asid, 'v': vn, 'vId': vsid,
+                              'dmg': dmg, 'hs': hs, 'kill': kill})
+        del self.feed_log[:-30]
+
     def players(self):
         if not self.state:
             return []
         rows = [p for p in colyseus.roster(self.state) if p.get('name') and not p.get('isSpectator')]
         rows.sort(key=lambda p: (p.get('score') or 0), reverse=True)
+        for p in rows:
+            p['hits'] = self.hits.get(p.get('sessionId'))   # damage/headshots seen since we joined (None = none yet)
         return rows
 
 
@@ -460,10 +489,16 @@ HIST = ROOT / 'reports' / 'live'
 def archive_line(tag, room, listing):
     """One room snapshot -> a line in reports/live/<UTC date>.ndjson (compact player rows)."""
     mode, mp, _ = listing.get(tag, (None, None, None))
-    ps = [[plain(p['shortId']), plain(p['name']), plain(p['team']), plain(p['kills']), plain(p['deaths']),
-           plain(p['score']), 1 if p['isBot'] else 0] for p in room.players()]
+    ps = []
+    for p in room.players():
+        h = p.get('hits') or {}
+        ps.append([plain(p['shortId']), plain(p['name']), plain(p['team']), plain(p['kills']), plain(p['deaths']),
+                   plain(p['score']), 1 if p['isBot'] else 0,
+                   h.get('dmg', 0), h.get('hits', 0), h.get('hs', 0), h.get('hsKills', 0), h.get('taken', 0)])
     line = {'t': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'room': tag, 'mode': mode, 'map': mp,
-            'cols': ['shortId', 'name', 'team', 'kills', 'deaths', 'score', 'bot'], 'p': ps}
+            'cols': ['shortId', 'name', 'team', 'kills', 'deaths', 'score', 'bot',
+                     'dmg', 'hits', 'hsHits', 'hsKills', 'dmgTaken'],   # hit counters = since we joined, not whole match
+            'p': ps}
     HIST.mkdir(parents=True, exist_ok=True)
     with open(HIST / f"{time.strftime('%Y-%m-%d', time.gmtime())}.ndjson", 'a', encoding='utf-8') as f:
         f.write(json.dumps(line, separators=(',', ':'), ensure_ascii=False) + '\n')
@@ -484,9 +519,12 @@ def write_live(held, listing, lock):
                        'team': plain(p['team']), 'kills': plain(p['kills']), 'deaths': plain(p['deaths']),
                        'score': plain(p['score']),
                        'health': plain(p['health']), 'shield': plain(p.get('shield')), 'role': plain(p.get('role')),
-                       'weaponSkin': plain(p.get('weaponSkin')), 'pos': [plain(v) for v in pos.values()]})
+                       'weapon': plain(p.get('weaponSkin')),   # the weapon in hand (old name kept below)
+                       'weaponSkin': plain(p.get('weaponSkin')), 'hits': p.get('hits'),
+                       'pos': [plain(v) for v in pos.values()]})
         rooms.append({'tag': tag, 'region': tag.split('~')[0], 'mode': mode, 'map': mp,
-                      'since': room.t0, 'updated': room.updated, 'patches': room.patches, 'players': ps})
+                      'since': room.t0, 'updated': room.updated, 'patches': room.patches, 'players': ps,
+                      'feed': room.feed_log[-15:]})
     rooms.sort(key=lambda r: (r['region'], -len(r['players'])))
     out = {'updatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'rooms': len(rooms),
            'players': sum(len(r['players']) for r in rooms), 'listed': len(listing), 'data': rooms}
