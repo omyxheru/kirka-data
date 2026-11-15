@@ -3,3 +3,4 @@
 2026-11-15 01:04  archive=ok  creators=ok  feeds=ok  shop=ok  quests=skip  maps=skip  collect=ok  snapshot=ok
 2026-11-15 07:09  archive=ok  creators=ok  feeds=ok  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  snapshot=ok
 2026-11-15 12:53  archive=ok  creators=ok  feeds=ok  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  snapshot=ok
+2026-11-15 18:46  archive=ok  creators=ok  feeds=ok  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  live=skip  snapshot=ok
