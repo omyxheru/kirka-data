@@ -46,6 +46,12 @@ CREATE TABLE IF NOT EXISTS leaderboard (
 CREATE TABLE IF NOT EXISTS online (
   ts TEXT PRIMARY KEY, eu INTEGER, na INTEGER, sa INTEGER, asia INTEGER, oce INTEGER, india INTEGER
 );
+CREATE TABLE IF NOT EXISTS trader_daily (
+  date TEXT, tag TEXT, short_id TEXT, name TEXT,
+  trades INTEGER, volume INTEGER, profit INTEGER, net_worth INTEGER, items INTEGER,
+  level INTEGER, clan TEXT, captured_at TEXT,
+  PRIMARY KEY (date, tag)
+);
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date TEXT, player_id TEXT, name TEXT, type TEXT, clan_id TEXT, clan_name TEXT, detail TEXT
@@ -133,6 +139,13 @@ def online_point(con, ts, r):
 def event(con, date, pid, name, type_, cid=None, clan_name=None, detail=None):
     con.execute("""INSERT INTO events (date,player_id,name,type,clan_id,clan_name,detail) VALUES (?,?,?,?,?,?,?)""",
         (date, pid, name, type_, cid, clan_name, detail))
+
+
+def trader_daily(con, date, tag, short_id, name, trades, volume, profit, net_worth, items, level, clan):
+    con.execute("""INSERT OR REPLACE INTO trader_daily
+        (date,tag,short_id,name,trades,volume,profit,net_worth,items,level,clan,captured_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (date, tag, short_id, name, trades, volume, profit, net_worth, items, level, clan, now()))
 
 
 def meta_get(con, k, default=None):

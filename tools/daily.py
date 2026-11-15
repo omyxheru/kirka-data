@@ -195,6 +195,8 @@ def main():
     if not cloud or os.environ.get('KIRKA_REFRESH'):
         status['quests'] = run('quests', 'quests.py', tries=2)
         status['maps'] = run('maps', 'maps.py', tries=2)
+    # top traders + their trade history / profit / net worth (public, from Luke's trade archive + Kirka Hub)
+    status['traders'] = run('traders', 'traders.py', tries=2)
     # the detailed stats database: snapshot every tracked player + clan into kirka.db (daily scores, clan
     # memberships with join dates, leaderboards, online). Once a day; subsequent runs no-op. Public, no login.
     status['collect'] = run('collect', 'collect.py', tries=1)
