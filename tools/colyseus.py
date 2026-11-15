@@ -367,6 +367,7 @@ def roster(state):
             continue
         row = {name: p.get(key) for key, name in PLAYER_FIELDS.items()}
         row['isBot'] = not p.get('wMNWWm')  # bots have no short-id
+        row['isSpectator'] = bool(p.get('wmMNWn'))  # spectators (incl. our own seat) sit in the players map too
         out.append(row)
     return out
 

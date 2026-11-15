@@ -1,0 +1,42 @@
+# Live room rosters for every open Kirka match, every 30 minutes, in GitHub's cloud (no PC needed).
+# Headless Chrome runs the real Kirka client as a guest (one tab per region); each tab asks its own lobby for
+# spectator seats (spectators take no player slot), a holder tab keeps the room sockets open, and Python decodes
+# the live room state. Paced under the lobby's rate limit. Docs: docs/kirka-everything.md section 18.
+# Output: reports/live/<UTC date>.ndjson (one line per room per minute) + skin-library/public/rooms/live.json.
+# The daily workflow loads the ndjson into kirka.db (tools/live_import.py).
+name: Kirka live rooms
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+  push:
+    paths: ['.github/workflows/kirka-live.yml']   # test run when this file changes
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kirka-data-writes
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install websocket-client msgpack
+      - name: Capture live rooms (5 min, all regions)
+        run: python tools/liveall.py --headless --cloud --minutes 5
+      - name: Commit
+        run: |
+          git config user.name  "kirka-bot"
+          git config user.email "kirka-bot@users.noreply.github.com"
+          git add reports/live skin-library/public/rooms/live.json 2>/dev/null || true
+          git commit -m "Kirka live rooms $(date -u +%Y-%m-%d\ %H:%M)" || echo "nothing to commit"
+          git pull --rebase || true
+          git push || echo "push skipped"

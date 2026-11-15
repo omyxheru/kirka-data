@@ -13,7 +13,7 @@ permissions:
   contents: write               # so it can commit the captured data back
 
 concurrency:
-  group: kirka-daily
+  group: kirka-data-writes   # shared with kirka-live so two runs never commit kirka.db at once
   cancel-in-progress: false
 
 jobs:

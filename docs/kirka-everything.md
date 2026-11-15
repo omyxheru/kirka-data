@@ -338,6 +338,15 @@ widgets, vectors, etc.
 | `35` (client→server) | JSON string: `{userAgent, platform, language, hardwareConcurrency, screen, …}` | the client **fingerprint / integrity blob** the client posts |
 | `0,1,23,24,69,81,116,123` | small ints / ext types | misc events (some use msgpack ext `0xD4` — not fully mapped) |
 
+> **OLD:** type 31 = "spawn / health / kill event" (`WmwwMNn` = health?); 67/70 = counter events.
+> **NEW (2026-11-15, verified offline 13/13 against the state patches):** **type 31 = HIT event** `{WmwwM: victim
+> sessionId, WmwwMWN: attacker sessionId, WmwwMNn: damage, WwMwN: headshot 1/0, WmwwMNWn: killed 1/0}`, which
+> arrives 1–5 frames before the patch. 67/70/24/22/69 are **client → server**. Type 0 = room settings, type 1 = full
+> voxel map, 29 = our own loadout, 23 = room command list. Player `wNWWwmMn` = **account level**, `wNWWwMmn` =
+> **held weapon** (not a skin), `wwMnWNW` = clan tag, `wnMmWwNW` = loadout with skin names. `tools/liveall.py`
+> currently drops all op-13 frames (holder filter). Full write-up + feature list:
+> [xip-more-ideas-20261115.md](xip-more-ideas-20261115.md).
+
 ### 4.6 The spectator mechanism (how we reach a room read-only)
 - In the client: **SERVERS** panel → the server list (`.server` rows with `.map` = `MODE_Map`, `.session-id` =
   `REGION~id`, `.online` = `n/max`, a `.button.join`). Clicking a row (a **trusted** click; synthetic events are
@@ -565,3 +574,82 @@ pos xyz]) + per-room `public/rooms/<tag>.json` + **archive** `kirka.db` `match_r
 After today's test runs the archive held **1,389 roster rows, 98 matches, 234 distinct players**. Decode-error
 recordings go to `captures/liveall/`. Not covered yet: login-only rooms (ranked, TRAD), rooms missing from the
 guest's server list, and the op-13 telemetry (kill feed / loadouts) — the holder only queues state frames for now.
+
+---
+
+## 17. HEADLESS GUEST + REAL-TIME EVENTS (xip, 2026-11-15: "real live data — damage/deaths immediately", "a better way for guest accounts, without opening anything")
+
+**2026-11-15 06:58 — createGuest works with no browser.** `POST https://api2.kirka.io/api/WwnNmwWM/wwnmWWNM` body
+`{}` → **201**, ~1.4 KB: `{wwMNm: <guest JWT>, WwMWm: <the new user>, wnMmwWWN: true}`. JWT payload =
+`{sub: "guest-<uuid>", iat}` (no expiry claim). New user: id `guest-72eaf80d-…`, shortId `V9WKHV`, name `Newbie`,
+level 1, coins 100, default loadout (LAR + character James), `wnMmwWWN: true` (= is guest?). Raw:
+`kirka-api/api2/probe-20261115/createGuest.json` (contains a live throwaway token — not pushed).
+**Finding for xip (info exposure):** the user object returned to the client carries the **anti-cheat fields
+un-obfuscated**: `online, hacker, fullName, picture, banDone, autoaim, wallhack, lastIp, autoaimWall,
+autoaimWallShoot, muteReason, kloTrust, kloPOINT2V2Trust, kloSADTrust, klo1V1Trust, klo2V2Trust`. For a guest they
+are its own (zeros), but it reveals the server-side cheat model/flags — check whether other user-object responses
+(profile, friends, lobby) also carry them for OTHER players.
+**Guest token works headless as a Bearer token:** `Authorization: Bearer <guest JWT>` → `GET /api/WwMWm`
+(getCurrentUser) **200** and `POST /api/wNnWmM` (getQuests) **201** (7.9 KB). The `x-guest-wwMNm` header ALONE
+gives 401 → **OLD** note above ("sent as header x-guest-wwMNm") is incomplete: **NEW** — REST auth for a guest is a
+normal Bearer token; x-guest-wwMNm is something else (maybe sent alongside, or for the lobby).
+
+---
+
+## 18. SEAT RESERVATION DECODED + CLOUD PLAN (2026-11-15, "build the headless and put it on the cloud")
+
+**Lobby capture decoded** (`captures/lobby-reserve/session-065920.json`, guest tab, EU, one SPECTATE click). Lobby
+socket `wss://eu.kirka.io/<processId>/<lobbyRoomId>?WmwNWnMw=<sessionId>`, Colyseus op-13 msgpack messages
+(`0d <type> <msgpack>`). Order seen:
+1. R op-10 JOIN (schema) · S `0a` ack · S `0d 23` (type 35, empty) · R op-14 lobby state.
+2. S type 112 `false` · R type 104 (`0x68`) = **the full maps list** (34 KB, 104 maps: tag, tagClass, activePlay,
+   optionPlay, …) · R type 23 (`0x17`) = party-chat **command list** (`/help` …) · R type 105 = server chat line
+   "Welcome to the party chat…".
+3. **Bot check, type 35:** R `0d 23 ce 01 05 a5 74` = a number challenge (17147252) → S `{data: <long XOR/base64
+   blob>}` → R `true`. **We do NOT generate this blob** (standing rule: no bot-check work). The real client in a
+   browser answers it; everything below runs on top of a lobby that the real client has already passed.
+4. S type 112 `false`, S type 113 `"online"` (presence).
+5. **The SPECTATE click = ONE message, type 101 (`0x65`):**
+   `{wwMnWWNm: <roomId>, wWwNWM: true /*spectate*/, wWwNWnmM: false}`
+6. **Reply type 102 (`0x66`)** = the seat reservation: `{wWnWMNwm: {mwwnWMNW: {<room listing: name 'DM',
+   WmwNWnwM: <processId 'dlGhJ2B1Y'>, WWMNmww: <roomId 'X3HQGZLcW'>, WnWwwMm: <metadata: mode, players 8/8,
+   inRound, roundCreatedAt, loggedOnly, needLevel…>}>, WmwNWnMw: <sessionId 'b-mH5Nce6'>}, wWwNWM: true}`.
+   → seat URL = `wss://<region>.kirka.io/<processId>/<roomId>?WmwNWnMw=<sessionId>` (matched the hooked URL exactly).
+7. Then S type 123 (`0d 7b`, no payload) → R type 116 (`0d 74`).
+
+**What this unlocks:** the minter tab no longer has to click through the SERVERS list. After the page's own lobby
+is connected (and the real client passed the check), the tab sends type 101 for ANY room id from the public
+`/matchmake/` listing and reads the type-102 reply. No row matching, no list re-render mis-clicks, and rooms that the
+guest's list never showed (TKO, PAR, …) can be requested too. Pure-Python (no browser) would need the type-35
+answer → not doing it; ask xip for an official way (e.g. a whitelisted spectator token) if a browserless version is
+wanted. Cloud plan: headless Chrome (real client, no 3D match loaded) + Python, runnable on a GitHub Actions runner
+or any server.
+
+**2026-11-15 — direct seat request WORKS (`tools/lobbyseat.py`).** Guest tab (EU) loads kirka.io normally, the
+client connects its lobby and passes the check itself (`0d 23 c3` seen → `__lobbyOk`); the hook then sends type 101
+over that same socket. Results: **0.37 s per seat** (old click flow: ~5–10 s), seats for `TKO Pool` (13p),
+`PAR Race`, `TDM Gulag` — TKO/PAR were rooms the guest's SERVERS list never showed. The type-102 reply is hidden
+from the game (listener registered before the client's onmessage + `stopImmediatePropagation`), so the client never
+tries to join; 0 room sockets had to be blocked. Hold test: 4 seats minted → holder opened them → **4/4 rooms decoded
+live in 15 s** (16 / 8 / 9 / 6 players, ~17 patches/s each, 0 errors). Next: liveall uses this instead of clicking,
+then headless Chrome for the cloud.
+
+**2026-11-15 07:15–07:29 — headless Chrome + liveall on the direct seat request (3 runs).**
+- **Headless Chrome works** (`tools/chrome.py`, plain `--headless=new`, throwaway profile, nothing spoofed): the real
+  client connects its lobby and passes the check by itself. → runnable on a cloud runner.
+- **Lobby rate limit:** a burst of 8 seat requests → inbound **type 101 = refusal string** `"Rate limit, retry in a
+  few seconds"`. Other refusals on 101: `"Room doesnt exist"` (match ended), `"Room is locked"`. 1 request per ~3–3.5 s
+  per guest lobby = 0 rate limits (12/12 seats in a row on one EU guest, all 12 rooms live at once → no per-guest
+  spectate cap seen). liveall now paces 3 s (`PACE`) and backs off 8 s on a rate limit. We stay under it, never
+  around it (no extra guests to dodge it).
+- **`onAuth failed` (4215) was mostly self-made:** requesting the next seat before the previous one was opened.
+  Fix: the minter thread opens each seat in the holder itself (own CDP link to the holder page) right after the
+  reply. "seat reservation expired" came from the main loop lagging (CPU) → gone after the next fix.
+- **CPU:** 6 guest tabs each rendering the 3D lobby in software saturated Chrome. Fix: once the tab's lobby passed
+  the check, the hook swaps `requestAnimationFrame` for a 1 fps timer (lobby networking doesn't need frames).
+  Decoder cost is negligible (36k frames/s in Python).
+- **Late seat replies leaked to the game** (it tried to join 11 rooms → blocked by the hook → its lobby closed 4002).
+  Fix: every inbound 101/102 is hidden from the game (we never click, so they're all ours).
+- **Result (run 3, 4 min, all 6 regions, headless):** 10 rooms at 1 min → 30 / 172 → **peak 45 of 57 listed rooms,
+  244 players** live at once; 0 expired seats, 0 lobby drops. Still open: ~7 rooms answered `onAuth failed` on the
+  first try (5 were TKO 20-slot, 1 a custom "ME dev" room) — cause unknown, retried after 3 min.

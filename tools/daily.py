@@ -200,6 +200,8 @@ def main():
     # the detailed stats database: snapshot every tracked player + clan into kirka.db (daily scores, clan
     # memberships with join dates, leaderboards, online). Once a day; subsequent runs no-op. Public, no login.
     status['collect'] = run('collect', 'collect.py', tries=1)
+    # live-room rosters captured by the half-hourly kirka-live Action (reports/live/*.ndjson) -> kirka.db match_roster
+    status['live'] = run('live', 'live_import.py', tries=1)
     # a compact snapshot of EVERYTHING for today (kept forever) so any past day can be looked back at
     status['snapshot'] = run('snapshot', 'snapshot.py', tries=2)
     path = report(status)

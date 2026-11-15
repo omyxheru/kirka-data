@@ -246,7 +246,7 @@ class Room:
     def players(self):
         if not self.state:
             return []
-        rows = [p for p in colyseus.roster(self.state) if p.get('name')]
+        rows = [p for p in colyseus.roster(self.state) if p.get('name') and not p.get('isSpectator')]
         rows.sort(key=lambda p: (p.get('score') or 0), reverse=True)
         return rows
 
@@ -300,13 +300,15 @@ def test_one(hold_s=25):
 
 # ---------------------------------------------------------------- every room, all regions
 REGIONS = ['eu', 'na', 'sa', 'asia', 'oceania', 'india']
+PACE = 3.0                      # seconds between seat requests per guest lobby
+CLICK = '--click' in sys.argv   # legacy: mint by clicking SERVERS rows instead of the direct lobby request
+CLOUD = '--cloud' in sys.argv   # archive to reports/live/*.ndjson instead of kirka.db (for the GitHub Action)
 
 
 def run_all(minutes=None, regions=REGIONS):
     import queue
     import threading
     import specd
-    import specsweep
     seats = queue.Queue()               # (tag, url) from minter threads -> main thread opens them
     lock = threading.Lock()
     held, backoff, listing = {}, {}, {}  # tag -> Room ; tag -> retry-after ts ; tag -> (mode, map, listed players)
@@ -315,9 +317,21 @@ def run_all(minutes=None, regions=REGIONS):
 
     def minter(region):
         R = region.upper()
+        hp = cdp.Page({'targetId': holder.page.target_id, 'url': ''})   # own CDP link to the holder page (thread-safe)
         ctx = guest_context(); ctxs.append(ctx)
-        m = Minter(ctx, region); m.page.wait_for_timeout(4000)
+        if CLICK:   # old flow: click rows in the SERVERS list
+            m = Minter(ctx, region); m.page.wait_for_timeout(4000)
+        else:       # direct seat request over the page's own lobby (docs §18) - any listed room, ~0.4 s each
+            import lobbyseat
+            m = lobbyseat.SeatMinter(ctx, region, new_tab)
+            if not m.ready(60):
+                print(f'  [{region}] lobby not ready: {m.status()}')
         while not stop.is_set():
+            if not CLICK and not m.alive():   # lobby dropped -> reload the tab (the client reconnects + re-checks)
+                print(f'  [{region}] lobby down {m.status()} - reloading')
+                m.load()
+                if not m.ready(60):
+                    stop.wait(30); continue
             rooms = list_rooms(region)
             with lock:
                 if rooms:  # recount this region (drop rooms that ended)
@@ -328,10 +342,13 @@ def run_all(minutes=None, regions=REGIONS):
                 todo = [r for r in sorted(rooms, key=lambda r: -r['players'])
                         if not r['loggedOnly']            # guests can't spectate login-only rooms (found 2026-11-15)
                         and f"{R}~{r['id']}" not in held and backoff.get(f"{R}~{r['id']}", 0) < time.time()]
-            for r in todo[:1]:          # one at a time, then re-list (rooms come and go)
+            for r in todo[:1 if CLICK else 8]:   # click flow: one at a time; direct: a batch, then re-list
                 tag = f"{R}~{r['id']}"
                 try:
-                    got, url = m.mint(tag, cname=r['cname'])
+                    if CLICK:
+                        got, url = m.mint(tag, cname=r['cname'])
+                    else:
+                        url, why = m.mint(r['id']); got = why if not url else tag
                 except Exception as e:  # noqa: BLE001
                     got, url = None, None; print(f'  [{region}] mint error {e}')
                 if url:
@@ -342,16 +359,25 @@ def run_all(minutes=None, regions=REGIONS):
                             held[real] = None  # reserved; main thread fills the Room
                     if dup:
                         print(f'  [{region}] seat was for {real}, already held - dropped')
-                    else:
-                        seats.put((real, url))
+                    else:   # open at once: a new reservation before the last seat is used -> 'onAuth failed'
+                        with lock:
+                            held[real] = Room(real, url)   # before open, so the main loop never drops the JOIN frame
+                        hp.evaluate(HOLDER)
+                        hp.evaluate('([t,u])=>window.__H.open(t,u)', [real, url])
                         if real != tag:
                             print(f'  [{region}] asked {tag} ({r["cname"]}), seat is {real}')
+                    if not CLICK:
+                        stop.wait(PACE)   # lobby rate limit: ~1 request / 3 s per guest is clean (tested 2026-11-15)
                 else:
+                    rl = isinstance(got, str) and 'Rate limit' in got
                     with lock:
-                        backoff[tag] = time.time() + 180
+                        backoff[tag] = time.time() + (8 if rl else 180)
+                    if rl:
+                        stop.wait(6); continue
                     print(f'  [{region}] no seat for {tag} {r["mode"]} {r["cname"] or r["map"]} (row={got}); retry in 3 min')
-            if not todo:
-                stop.wait(15)
+                    if not CLICK:
+                        stop.wait(PACE)
+            stop.wait(15 if not todo else 0)
 
     ctx_h = guest_context(); ctxs.append(ctx_h)
     holder = Holder(ctx_h)
@@ -365,11 +391,6 @@ def run_all(minutes=None, regions=REGIONS):
     try:
         while not (t_end and time.time() > t_end):
             try:
-                while not seats.empty():
-                    tag, url = seats.get()
-                    holder.open(tag, url)
-                    with lock:
-                        held[tag] = Room(tag, url)
                 for tag, r in holder.poll().items():
                     room = held.get(tag)
                     if not room:
@@ -389,7 +410,11 @@ def run_all(minutes=None, regions=REGIONS):
                 for tag, room in list(held.items()):
                     if room and room.state and now - archived.get(tag, 0) > 60:
                         try:
-                            specd.write_and_archive(specd.to_panel(tag, room.state)); archived[tag] = now
+                            if CLOUD:   # text history (git-friendly); tools/live_import.py loads it into kirka.db
+                                archive_line(tag, room, listing)
+                            else:
+                                specd.write_and_archive(specd.to_panel(tag, room.state))
+                            archived[tag] = now
                         except Exception as e:  # noqa: BLE001
                             print('  archive error', tag, e)
                 if now - last_print > 15:
@@ -429,6 +454,21 @@ def plain(v, depth=0):
     return str(v)
 
 
+HIST = ROOT / 'reports' / 'live'
+
+
+def archive_line(tag, room, listing):
+    """One room snapshot -> a line in reports/live/<UTC date>.ndjson (compact player rows)."""
+    mode, mp, _ = listing.get(tag, (None, None, None))
+    ps = [[plain(p['shortId']), plain(p['name']), plain(p['team']), plain(p['kills']), plain(p['deaths']),
+           plain(p['score']), 1 if p['isBot'] else 0] for p in room.players()]
+    line = {'t': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'room': tag, 'mode': mode, 'map': mp,
+            'cols': ['shortId', 'name', 'team', 'kills', 'deaths', 'score', 'bot'], 'p': ps}
+    HIST.mkdir(parents=True, exist_ok=True)
+    with open(HIST / f"{time.strftime('%Y-%m-%d', time.gmtime())}.ndjson", 'a', encoding='utf-8') as f:
+        f.write(json.dumps(line, separators=(',', ':'), ensure_ascii=False) + '\n')
+
+
 def write_live(held, listing, lock):
     rooms = []
     with lock:
@@ -459,6 +499,9 @@ if __name__ == '__main__':
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # room text can contain any character
     except Exception:  # noqa: BLE001
         pass
+    if '--headless' in sys.argv:   # start our own headless Chrome (cloud / no visible browser) - tools/chrome.py
+        import chrome
+        chrome.start()
     if '--one' in sys.argv:
         test_one()
     else:
