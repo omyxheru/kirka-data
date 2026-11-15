@@ -55,7 +55,7 @@ match rosters.
 > 2. The roster is in the Colyseus **schema** state (`@colyseus/schema` v2, binary), not MessagePack. MessagePack is only
 >    the op-13 message channel. `tools/colyseus.py` decodes both (see kirka-everything.md §4.3).
 > 3. HTTP `joinById` is disabled (`{code:4210,"invalid method joinById"}`); seats come only from the authed lobby
->    websocket. Headless every-match sweep is PARKED by xip (2026-11-15). Full write-up: kirka-everything.md §4.5.
+>    websocket. Headless every-match sweep is PARKED by xip (2026-11-15). Full write-up: kirka-everything.md §4.8.
 
 ### Luke / KirkaTrades - `kirka.lukeskywalk.com`
 Public, **no CORS** (fetch server-side). Prices, open trades, **completed-trade archive since 2023 (929 day-files,

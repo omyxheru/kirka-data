@@ -77,6 +77,76 @@ full Swagger with real operation names (decode anything after an update). Mostly
 - **KAT-only (staff, 403):** `KatController_*` searchUser, getItemsByUserId, add/deleteItems, setUserRole,
   **changeUserCurrency**, getLogs, **getRankedSeasons** (past seasons), inspector reports — the surface xip could grant.
 
+**DIG ROUND 2 (2026-11-15) — xip: "there are still a lot of endpoints we didn't even know about, dig more."**
+Full table of all 336 routes + all 103 request-body formats: [api2-routes-20261115.md](api2-routes-20261115.md)
+(generator `tools/api2_routes.py`; spec saved `kirka-api/api2/docs-json-20261115.json`). docs-json on 11-15 is
+**identical to 11-14** (same 336 routes, no renames). Coverage before this round: only 126/336 ever probed; KAT
+(staff, 135 routes) is set aside per xip. Of the 201 non-KAT routes, these were **undocumented until now**:
+- **`POST /api/WwnNmwWM/wwnmWWNM` = `createGuest`** (no auth in spec) — the guest-account mint the guest note below
+  was missing. Not called yet.
+- **Replay system disguised as "layout"** (ReplayController/ReplayAdminController): `GET /api/layout/state` (public
+  config), `POST /api/layout/open` (start replay, `StartReplayDto`), `POST /api/layout/{id}/parts/{sequence}` (upload
+  chunk, `ReplayChunkDto`), admin `GET /api/layout/sheets/list|{id}|{id}/parts/{seq}` (401). The client records and
+  uploads match replays. `POST /api/layout/tiles/{id}` = CaptureController (screen capture upload).
+- **Moderation cases** `/api/moderation/cases[/{id}|/{id}/screenshot|/bans|/settings|/replay-settings]` (401, staff)
+  and **inspector** `/api/inspector/reports|tagged` (401) — anti-cheat review. Documented only; not ours to touch.
+- **Room bans** `/api/WwwmnMW/WwnNwW|WnwmwM|wwnmMWN` (list/ban/unban, auth).
+- **Players (login):** `GET /api/user-WwMWmw/wmwNnWWM/{shortId}` maps by creator, `GET /api/user-wwMNWmn/wmwNnWWM/{shortId}`
+  custom skins by creator, `GET /api/user-WwMWmw/wMNwWWm/{id}` map comments, `GET /api/user-wwMNWmn/wMWwmn` checkName.
+- **Open, never probed:** `getNewRankedCategories` (`/api/wmWMnN/wMWwnm`), `getCharacterCards`
+  (`/api/WwMWnwNm/wwnmWNMW`), `getBundles`, `getCurrency`, `getAdGuest` (`GET /api/wnMmwNW/WnWmwwMN`),
+  `/api/special-image/{file}`, `/api/mode-thumb/{id}[/{kind}]`, `/api/news-image/v{version}`.
+- **Friends** offer/accept/cancel, **Twitch** link/entitlements, **battlepass** claim, **notifications** — account
+  actions, documented only.
+- Key body formats: `GetMatchHistoryDto {WnWwwNmM:id, wMWnwm:bool(isShortId?), wMNmWWwn:number(page/limit?)}`,
+  `UserItemIdDto {WnWwwNmM}`, `OfferFriendshipDto {wnMmwWN}`, `UserIdDto {wNnWmw}`.
+Next: probe the open no-auth GETs read-only, results appended below as found.
+
+**Probe results (2026-11-15, plain GET, no auth; raw responses in `kirka-api/api2/probe-20261115/`):**
+- `GET /api/WwMWnwNm/wmMwW` **getCurrency** → `{wwMnN:[packs]}`: coin/diamond packs, each `WnWwwNmM` id,
+  `WwMWmn` label ("375 000"), `wwMNnWm` price in diamonds (30), `wMNnW` amount (375000), `wMwW` icon file,
+  `wMWwnNW` currency code (`wMNmW` = coins). Packs: 375k=30, 1M=80, 2.5M=200, 8.125M=650, …
+- `GET /api/WwMWnwNm/wnMNmWwW` **getBundles** → 5 bundles (e.g. "Autumn", start `wmwNnWMW` 2026-11-01, end
+  `wNwWmnMW` 2026-11-17), each with `wmnWNMwW` = items: `WwMWnmN` item {id, name, `wNmMnW` rarity code}, `wNmMn`
+  qty, `WwMWmwn` type (CHARACTER…), `wwMNnWm` price. → **bundle schedule + prices, archivable daily.**
+- `GET /api/WwMWnwNm/wwnmWNMW` **getCharacterCards** → `{wwnmWNM:[cards]}`: name ("Scary"), price 499, card colours
+  (`wmMwWnWN` hex, `wNwWmnWM` CSS gradient), `wMWwnWmN` = the **drop pool** (character name + rarity code). →
+  **what each card can roll.**
+- `GET /api/WwMWm/wmWMnwNW` **getProfileModes** → 3 modes (DM, TDM, POINT): id/name, `wMNmWWwn` order, `wmWnNMwW`
+  enabled, `WwwmnWNM` (0/5/10, unknown — min level?), `wmwNnWMW` created date.
+- `GET /api/wMNn/wnMN` **getEffects** → 16 crafting effects with **real field names** (not obfuscated): name,
+  displayName, description, rarity, **`shaderCode` (GLSL fragment source)**, isAnimated.
+- `GET /api/layout/state` → `{"ready":false}` — the replay recorder is **currently switched off** server-side.
+- `GET /api/wmWMnN/wMWwnm` getNewRankedCategories → `[]`; `GET /api/wmWMnN/wWMwWnmN` getActiveRankedCategories →
+  `[]` — **no ranked category active right now** (between seasons?).
+- `GET /api/wnMmwNW/WnWmwwMN` getAdGuest → 200, empty body (no ad reward for guests at the moment).
+
+**Per-player open endpoints — real responses decoded (2026-11-15, test player = solo-leaderboard #1, read-only
+POSTs, raw in `kirka-api/api2/probe-20261115/`).** All work with **no login, no key**. The id body is
+`{WnWwwNmM: <uuid or shortId>, wMWnwm: <true if shortId>}` (+ `wMNmWWwn` where noted).
+- `POST /api/WwMWm/wmMwWn` **getUserProfile** → `WnWwwNmM` uuid, `wnMmwWN` **shortId**, `WwMWmn` name, `WmMnwNw` bio,
+  `WwMWmnwN` role code, `WmMnwNwW` ranked rating, `wmWMnNWw`, `wNmMnWwW`/`wNmMnWw`/`wNmMWwnW` (ratings, unknown which),
+  `wwMnNWW` level, `wnMwmN` total XP, `wWMwWmN`/`wWMwWm` (XP into level / XP for level?), `wwMnN` coins?,
+  `wMNmWWnw` diamonds?, `wmwNnWMW` **account created**, `WwMWmnw` **clan**, `wWMnWNw` equipped weapon skin
+  (item + parent weapon), `wWnWNmMw` equipped character, `wwMNnWmW` **lifetime stats** {`wwMnNmW` games,
+  `WwMWmwnN` wins, `wwMnNm` kills, `wNmWnM` deaths, `wmwNW` headshots, `wNmWnwMW` score}.
+- `POST /api/WwMWm/wWwWmMN` **getMatchHistory** — **`wMNmWWwn` is the RANKED CATEGORY, not a page.** Returns the
+  player's **complete** ranked match list for that category (count always equals the ranked-profile games total;
+  323 entries seen for one category, back to 2026-09-21). Entry = `WnWwwNmM` match id, `wNmWnwWM` **won (1/0)**,
+  `wwMnNm` kills, `wNmWnM` deaths, `wNmWnwMW` score, `WmMnwN` **map**, `WmMnwNwW` 0–1 float (unknown — rating
+  change factor / performance?), `wmwNnWMW` date. **No other players in the entry** — it is the player's own line
+  only; no non-KAT route fetches a match by id, so the per-match roster is NOT available here.
+- `POST /api/WwMWm/wWNwMn` **getRankedProfile** (same body, `wMNmWWwn` = category) → name, shortId, level, rating
+  `WmMnwNwW`, and `wwMNnWmW` per-category stats {`wNmWnwW` games, `WmMnwwNW` wins, `WmMnwNwW` losses, `wwMnNm`
+  kills, `wNmWnM` deaths, `wNmWnwMW` score, `wmwNW` headshots, `wnMmwNWW` ?, `WnWwwNm` K/D string}.
+- Categories seen for the test player: 0 → 150 games, 1 → 175, 2 → 0, 3 → 0, 4 → 23, 5 → 10, 6 → 323 (323 wins,
+  0 losses, K/D 18.88 — looks like a vs-bots or event category). Mapping category id → 1v1/2v2/SAD/POINT2V2 not
+  pinned yet (the leaderboards name 4 categories: `wWmNWnM` 1V1, `wWmNWnMw` 2V2, `wWmNWnwM` SAD, `wWmMwWnN`
+  POINT2V2).
+- `POST /api/WwMWm/wNmWnw` **getUserTrophy** → `[]` for this player (no trophies, or trophies not live).
+- Leaderboard entries carry the player uuid (`wNnWmw`), so **leaderboard → uuid → profile + full ranked history**
+  works end to end with no login: a full ranked-player history crawler is possible (keep it rate-limited).
+
 **Guest / anonymous account (xip's hint: "logged-out we can still get quests"):** the client's **Guest Login**
 (`guest-login-btn`, `onGuestLoginClick`) mints a **`guestToken`** with no credentials, sent as header
 **`x-guest-wwMNm`**. A guest is a throwaway real account: it reaches the login-only endpoints (quests, maps,
@@ -118,7 +188,7 @@ Other matchmake endpoints: `GET /matchmake/` (the listing), `GET /matchmake/room
 > a plain HTTP seat reservation.
 > **NEW (2026-11-15, tested):** Kirka has **disabled the HTTP matchmake methods**. `POST /matchmake/joinById/<id>`
 > returns `{"code":4210,"error":"invalid method joinById"}`. Seats are reserved only over the logged-in lobby
-> websocket. Full details in §4.5.
+> websocket. Full details in §4.8.
 
 ---
 
@@ -134,11 +204,11 @@ This is where "who's playing" + all live telemetry lives. **No public archive of
    ("Spectators can't play the match anymore", "Permanent spectator; irreversible").
 
 > **OLD (2026-11-15):** step 1 above (HTTP `joinById` → seat reservation).
-> **NEW (2026-11-15, tested):** step 1 does NOT work over HTTP anymore (error 4210). The real flow is in §4.5:
+> **NEW (2026-11-15, tested):** step 1 does NOT work over HTTP anymore (error 4210). The real flow is in §4.8:
 > the seat comes from the authed lobby websocket, and the game-socket roomId can differ from the listed room id.
 > Steps 2 and 3 are still correct (captured from the real client).
 
-### 4.5 Headless "every match" sweep — what we tried and where it stopped (2026-11-15)
+### 4.8 Headless "every match" sweep — what we tried and where it stopped (2026-11-15)
 Goal (xip asked for it for every match): a tool with no browser that spectates every open room per region and
 archives the roster. Tool: `tools/specsweep.py` (has the ws connect + decode + reserve scaffold and a `--test` debug
 mode). Also `tools/specd.py` and `tools/room.py` (earlier scaffolds).
@@ -319,6 +389,15 @@ config JSON, etc.
 4. **Spectator data exposure (by design, but total)** — a spectator receives the full authoritative state of every
    player: exact position, rotation, health, shield, score, kills, deaths, team, loadout and per-tick movement. A
    spectator client therefore has complete positional knowledge of every player (relevant to wallhack/radar cheats).
+5. **(2026-11-15) Dev addresses left in the production bundle** — `game-src/2026-11-13/app.0312c6a3.js` still contains
+   `http://127.0.0.1:4000`, `http://localhost:8080`, `ws://127.0.0.1:2567` (local Colyseus default port) and
+   `ws://localhost:443`. Harmless at runtime but leaks the dev setup; worth stripping in the build.
+6. **(2026-11-15) Spec exposes the anti-cheat surface** — docs-json names the replay recorder (`/api/layout/*`, framed
+   as "layout" to look harmless), screen capture upload (`/api/layout/tiles/{id}`), moderation cases with screenshots
+   and the inspector. The disguised path names don't help when the public spec labels them `ReplayController` etc.
+7. **(2026-11-15) `createGuest` is unauthenticated** (`POST /api/WwnNmwWM/wwnmWWNM`, no security in spec) — anyone can
+   mint guest accounts; worth a rate limit if there isn't one. (Not called by us.)
+Also seen: host `https://client.kirka.io` in the bundle (not yet looked at).
 
 ## 10. Access levels
 - Normal player (our account): all of §1–§7 except login-gated and KAT routes.
@@ -355,7 +434,7 @@ pure-headless spectator (`joinById` for every room with no client) is the next s
 game-server sockets.
 
 > **OLD (2026-11-15, morning):** "pure-headless spectator via `joinById` is the next step".
-> **NEW (2026-11-15):** HTTP `joinById` is disabled (4210); headless needs the lobby reserve protocol (§4.5).
+> **NEW (2026-11-15):** HTTP `joinById` is disabled (4210); headless needs the lobby reserve protocol (§4.8).
 >  PARKED by xip. `room.py`/`specd.py` (local, via the logged-in client) are unchanged.
 
 ## 15. Website pages (what shows the data)
