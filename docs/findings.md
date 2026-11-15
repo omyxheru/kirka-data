@@ -56,6 +56,7 @@ match rosters.
 >    the op-13 message channel. `tools/colyseus.py` decodes both (see kirka-everything.md §4.3).
 > 3. HTTP `joinById` is disabled (`{code:4210,"invalid method joinById"}`); seats come only from the authed lobby
 >    websocket. Headless every-match sweep is PARKED by xip (2026-11-15). Full write-up: kirka-everything.md §4.8.
+> **NEW (2026-11-15, later):** NOT parked — xip meant leave KAT (staff API, last priority), not the spectator sweep.
 
 ### Luke / KirkaTrades - `kirka.lukeskywalk.com`
 Public, **no CORS** (fetch server-side). Prices, open trades, **completed-trade archive since 2023 (929 day-files,

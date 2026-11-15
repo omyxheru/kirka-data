@@ -82,6 +82,7 @@ Full table of all 336 routes + all 103 request-body formats: [api2-routes-202611
 (generator `tools/api2_routes.py`; spec saved `kirka-api/api2/docs-json-20261115.json`). docs-json on 11-15 is
 **identical to 11-14** (same 336 routes, no renames). Coverage before this round: only 126/336 ever probed; KAT
 (staff, 135 routes) is set aside per xip. Of the 201 non-KAT routes, these were **undocumented until now**:
+*(xip's exact priority: staff/KAT is the LAST priority, build everything else first.)*
 - **`POST /api/WwnNmwWM/wwnmWWNM` = `createGuest`** (no auth in spec) — the guest-account mint the guest note below
   was missing. Not called yet.
 - **Replay system disguised as "layout"** (ReplayController/ReplayAdminController): `GET /api/layout/state` (public
@@ -237,6 +238,10 @@ not parallel).
 
 **STATUS — PARKED (2026-11-15):** xip said leave this for now. Nothing deleted; resume from step 3 above if it
 comes back.
+
+> **OLD:** "PARKED — xip said leave this for now" (a misread).
+> **NEW:** **CORRECTION (2026-11-15, later, from xip via the user):** xip said leave **KAT** (the staff/admin API) for now — KAT is our LAST priority, build other
+> stuff first. The spectator sweep is **NOT parked**; it stays on the list.
 
 ### 4.2 Frame format
 Each WebSocket binary frame = **1 opcode byte + payload**.
@@ -397,6 +402,9 @@ config JSON, etc.
    and the inspector. The disguised path names don't help when the public spec labels them `ReplayController` etc.
 7. **(2026-11-15) `createGuest` is unauthenticated** (`POST /api/WwnNmwWM/wwnmWWNM`, no security in spec) — anyone can
    mint guest accounts; worth a rate limit if there isn't one. (Not called by us.)
+   > **OLD:** listed as a bug.
+   > **NEW (2026-11-15, later):** **NOT a bug — a feature.** xip confirmed guest accounts are intentional
+   > (guest play / logged-out quests). Kept here only as history; drop it from the bug report to xip.
 Also seen: host `https://client.kirka.io` in the bundle (not yet looked at).
 
 ## 10. Access levels
@@ -436,6 +444,7 @@ game-server sockets.
 > **OLD (2026-11-15, morning):** "pure-headless spectator via `joinById` is the next step".
 > **NEW (2026-11-15):** HTTP `joinById` is disabled (4210); headless needs the lobby reserve protocol (§4.8).
 >  PARKED by xip. `room.py`/`specd.py` (local, via the logged-in client) are unchanged.
+> **NEW (2026-11-15, later):** not parked after all — xip meant leave KAT (staff), not the spectator work. See §4.8.
 
 ## 15. Website pages (what shows the data)
 See [website.md](website.md). The Games page room-detail panel shows the live match timer, win/time limits, ranked/
