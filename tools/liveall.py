@@ -521,7 +521,8 @@ def write_live(held, listing, lock):
                        'health': plain(p['health']), 'shield': plain(p.get('shield')), 'role': plain(p.get('role')),
                        'weapon': plain(p.get('weaponSkin')),   # the weapon in hand (old name kept below)
                        'weaponSkin': plain(p.get('weaponSkin')), 'hits': p.get('hits'),
-                       'pos': [plain(v) for v in pos.values()]})
+                       # positions are tournament/event-only (xip) -> never in the public cloud output
+                       'pos': None if CLOUD else [plain(v) for v in pos.values()]})
         rooms.append({'tag': tag, 'region': tag.split('~')[0], 'mode': mode, 'map': mp,
                       'since': room.t0, 'updated': room.updated, 'patches': room.patches, 'players': ps,
                       'feed': room.feed_log[-15:]})

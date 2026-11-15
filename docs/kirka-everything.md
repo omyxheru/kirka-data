@@ -669,3 +669,10 @@ hand; the old `weaponSkin` name was wrong, kept for compatibility). Cloud ndjson
 coverage than the PC runs. Committed `reports/live/2026-11-15.ndjson` (222 room snapshots) + `live.json`. Runs every
 30 min from now on; the kill-feed/hit-stats version goes live from the next run. Our Games page now counts
 `meta.wWMnw` (real players) instead of `WNMWnwm` (includes spectators, so our own seats inflated it).
+
+**2026-11-15 — RULE: live positions are restricted (xip).** Player positions (state pos/rot), op-13 type 28
+(60 Hz movement + aim) and the map voxels are for **tournaments / events** only, not for everyone (live enemy
+positions on a public page = a wallhack). Change: `liveall.py --cloud` now writes `pos: null` in live.json, so the
+public kirka-data repo carries no positions. NOTE (OLD): the 2026-11-15 15:41 cloud commit (and any run before this
+fix) has end-of-run positions in live.json — minutes old, so useless in a live match; history left as is.
+Position features (heatmaps, minimap, caster view) go into a private tool for event staff.
