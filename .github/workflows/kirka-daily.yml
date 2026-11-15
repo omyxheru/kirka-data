@@ -32,8 +32,8 @@ jobs:
         run: |
           git config user.name  "kirka-bot"
           git config user.email "kirka-bot@users.noreply.github.com"
-          # only the reports and the site's data feeds - never the auth file or the big catalogue snapshot
-          git add reports skin-library/public/*.json 2>/dev/null || true
-          git reset -- kirka-api/auth.json 2>/dev/null || true
+          # reports, the site's data feeds, and the stats database - never the auth file or big catalogue snapshot
+          git add reports skin-library/public/*.json kirka-api/kirka.db 2>/dev/null || true
+          git reset -- kirka-api/auth.json kirka-api/catalog.json 2>/dev/null || true
           git commit -m "Kirka data $(date -u +%Y-%m-%d\ %H:%M)" || echo "nothing to commit"
           git push || echo "push skipped"

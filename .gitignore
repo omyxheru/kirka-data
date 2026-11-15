@@ -2,3 +2,6 @@ kirka-api/auth.json
 kirka-api/catalog.json
 __pycache__/
 *.pyc
+
+kirka-api/kirka.db-wal
+kirka-api/kirka.db-shm
