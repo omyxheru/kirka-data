@@ -69,3 +69,9 @@ Never commit `auth.json`. See `CLOUD-SETUP.md` for first-time setup.
 `npm run` scripts in `skin-library/`: `creators`, `feeds`, `shop`, `quests`, `maps`, `archive`, `traders`,
 `data:live` (creators+feeds+shop). Or `python tools/daily.py` for the full job. `python tools/auth.py status` to
 check the login.
+
+## Live all-rooms roster — `tools/liveall.py` (added 2026-11-15)
+The "guest army": 6 guest tabs (one per region, `localStorage.region` preset) mint spectator seats; one holder tab
+on `kirka.io/ads.txt` holds every room socket; `tools/colyseus.py` decodes state + patches live. Writes
+`skin-library/public/rooms/live.json` every 2 s and archives each room to `kirka.db` `match_roster` once a minute.
+Local only (needs debug Chrome on 9222). Full build log: kirka-everything.md §16.

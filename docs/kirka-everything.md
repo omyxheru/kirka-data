@@ -450,3 +450,118 @@ game-server sockets.
 See [website.md](website.md). The Games page room-detail panel shows the live match timer, win/time limits, ranked/
 level/login flags, custom-map author, and — when captured — the **roster** (name, short-id, K/D/score, bots flagged,
 "captured Xs ago"), fed by `room.py` (DOM) or `specd.py` (headless socket decode).
+
+---
+
+## 16. LIVE ALL-ROOMS PLAYER DATA — build log (started 2026-11-15)
+Goal (user, for xip): live player data for **every** open room, all regions. Findings appended as they happen.
+
+**2026-11-15 — live patches verified offline.** `colyseus.Decoder` is stateful: after the op-14 full state, feeding
+every op-15 patch into the SAME decoder keeps the state current. Against `captures/ws-spectate/session.json`:
+**159/159 patches applied, 0 errors**; over ~9 s kills/deaths/score/positions moved (e.g. sky_3o3 28→30 kills,
+1175→1275 score; yusuf.baba.67 6→7 kills). So one open socket per room = a live roster, no re-spectating needed.
+Frames the real client SENT on join (recorded): `0x0a` (JOIN ack), `0x0d 0x45` (op-13 type 69, no payload),
+`0x0d 0x16 "refactor"` (op-13 type 22). A headless socket must send at least the `0x0a` ack to receive state.
+
+**Plan ("guest army"):** guest browser tabs (incognito contexts in debug Chrome, `tools/guest.py`) only MINT the
+spectator seat — a page-level `WebSocket` hook catches the game-room URL
+(`wss://<region>.kirka.io/<processId>/<roomId>?WmwNWnMw=<sessionId>`) before the tab connects, and hands it to
+Python. Python opens that socket itself and decodes state + patches live. One tab can mint seats for many rooms in
+turn; several guest tabs mint in parallel. No 3D game tab has to stay open per room.
+Tool: `tools/liveall.py` (in progress).
+
+**2026-11-15 — first mint test (guest tab, hook armed only at SPECTATE).** Sockets the guest page opened, in order:
+1. `wss://eu.kirka.io:443/dlGhJ2B1Y/P7O0-IUed?WmwNWnMw=hHNHGtphc` — the **lobby** room (same URL shape as a game room!
+   so the hook must stay disarmed until the SPECTATE click), 2. `wss://chat.kirka.io` — global chat,
+3. after SPECTATE: `wss://eu.kirka.io:443/dlGhJ2B1Y/lGJT4_grf?WmwNWnMw=BGnCCx9nt` — the **spectator seat**. Notes:
+the client puts an explicit **`:443`** in the host (first regex missed it); the processId (`dlGhJ2B1Y`) was the same
+for lobby and game room (one EU process); the game roomId here **equalled** the listed room id (`lGJT4_grf`); the page
+URL changes to `https://kirka.io/games/EU~lGJT4_grf` when spectating. A guest account can spectate.
+
+**2026-11-15 06:30 — FIRST LIVE ROOM WORKING (`python tools/liveall.py --one`).** Guest tab minted the seat for
+`EU~lGJT4_grf`, the holder tab on `https://kirka.io/ads.txt` opened it (real kirka.io origin, no header faking, no
+game loaded), Python decoded state + patches live: **9 players, ~20 patches/s (411 in ~25 s)**, every field live —
+name, shortId, team, kills/deaths/score, **HP** (drops to 0 on death, back to 100 on respawn), **xyz position**.
+Seen live: Navy_seal6864 12→14 kills / 370→425 score; Dream 14→15 deaths with hp 0 then 100. The holder approach
+needs nothing from the game tab after the mint (the minting tab got a dummy socket and never loaded the match).
+Note: several players named "Newbie" with different shortIds — that is Kirka's default name for new/guest players,
+so **shortId is the real identity**, never the name.
+
+**2026-11-15 — scale check.** Public listings right now: EU 17 rooms/57 players, NA 7/19, SA 2/9, ASIA 9/41,
+OCEANIA 7/12, INDIA 10/41 = **52 rooms, 179 players**. The in-game SERVERS list shows **one region at a time**
+(`.select-region`; a fresh guest landed on ASIA, presumably nearest/ping) and filters by tabs MAIN / PARKOUR /
+CUSTOM. So minting every room by clicking the list needs region + tab switching. Testing the direct room URL
+`kirka.io/games/<REGION>~<id>` instead (hook blocks any room socket on that page so it can't auto-join as a player).
+
+**2026-11-15 — direct room link test → NOT used.** Opening `kirka.io/games/NA~hSRCpJS98` (hook catching every room
+socket) caught `wss://na.kirka.io:443/ySEXKrQIm/uFs4WYiPn?...` — that is the **NA lobby** (roomId ≠ the target), so
+the page sat on LOADING. Learned: **the lobby is per region** (opening a NA link connects the NA lobby), and a room
+link may auto-join; a caught seat URL doesn't say whether it's a spectator or player seat, so we only ever mint from
+the SPECTATE button (seat is guaranteed spectator). Going with region switching in the SERVERS list instead.
+
+**2026-11-15 — region = a localStorage key.** The client stores the chosen region as `localStorage.region`
+(`"EU"`, `"NA"`, …) and connects that region's lobby; the SERVERS list then shows that region. A fresh guest picks
+one automatically (seen ASIA once, EU once). Also in localStorage: `guestToken` + `token` (guest JWT), `version`
+(`0.44.4` = game version), ~300 `SETTINGS___SETTING/...` keys (all client settings, incl. matchmaking
+`WARMUP_ONLY`, `MINUTES_LEFT`, `LOGGED_ONLY`, privacy `ANONYMOUS_MODE`, spectator keybinds `SPECTATOR_WALLS`/`FLY`/
+`FPS`/`TPS`). → **Guest army design:** one guest tab per region with `localStorage.region` preset before load
+(script injected at document start), each minting its own region's rooms in parallel; one shared holder page.
+
+**2026-11-15 06:35 — first guest-army run (EU+NA, 3 min).** Within ~2 min: **14 rooms live, ~70 players** decoded
+at once from one holder tab. Problems found (being fixed):
+1. live.json write crashed: `Circular reference detected` — some decoded player field is a shared schema object
+   that links back; output must be sanitised to plain values.
+2. Decoder error `index out of range` on 2 rooms after ~1,400 patches each (EU~udDYg8RjW, NA~hSRCpJS98), then the
+   server closed the socket with code 1000 (normal close) — suspect round end / room reset sends an op we decode
+   wrong. Need the raw frames to fix → adding a frame recorder (captures/liveall/).
+3. "no seat" on some listed rooms although the row was found (EU~eJjMtqzX2, EU~aF4TQuoiG) → need the reason
+   (no SPECTATE button? full / ranked / private?).
+
+**2026-11-15 06:45 — decoder bug found (from the recorded frames in `captures/liveall/`).** Second run (EU+NA,
+4.5 min) reached **19 rooms / 108 players live**, but 16 rooms hit decode errors (`schema number prefix 0x80/0x84/
+0x94…`, `index out of range`). Tracing the failing patch every time: a **map DELETE** on the players map (refId 4,
+type 15) — e.g. `0f 8d … ff 04 40 00 …` = switch to ref 4, op `0x40` DELETE, index 0 — i.e. **a player leaving**.
+In @colyseus/schema v2 a DELETE carries **no value**, but `colyseus.py` still read an element value after it, so the
+rest of the patch was misaligned. Same bug in the array DELETE path. (The offline 9 s capture never had a player
+leave, so validation missed it.) Fix: return right after a plain DELETE in `_map_op`/`_array_op`.
+Also seen: the patch right after the delete ADDs a new player whose name starts `bot…` (a bot filling the slot).
+**Fix verified:** replaying all 16 recorded failing rooms + the original capture through the fixed decoder:
+**14,533 state/patch frames, 0 errors** (backup of the old decoder: `tools/colyseus.py.bak-20261115`).
+
+**2026-11-15 06:55 — why some rooms gave "no seat".** Compared the in-game SERVERS list (guest, EU) with the public
+listing:
+- **Login-only rooms can't be spectated by a guest**: `loggedOnly___METADATA=true` rooms — ranked (`1V1`, `RSAD`,
+  `POINT2V2` needLevel 10) and `TRAD` (50-slot). They appear in the list but no seat is minted for a guest. Covering
+  them needs a logged-in account (not used: xip said guest accounts).
+- **Custom-map rooms** show as `USER MODE` rows with the custom map name (e.g. "Arsenal: Warzone", "anti gravity",
+  "Hunger Games") and **no session-id text** → matched by name; the real roomId is then read from the seat URL.
+- The in-game list showed **14 of 20** listed EU rooms; the MAIN/PARKOUR/CUSTOM tabs did not change it (those tabs
+  belong to another panel). Rooms missing from the guest's list at that moment: a `PAR` parkour room, two `TKO`
+  rooms, `POINT Castle`, `TDM Pool` (all 1–4 players). Reason not known yet (maybe list cap / matchmaking settings
+  `WARMUP_ONLY`, `MINUTES_LEFT`).
+- **Full rooms (`is-locked`, 8/8) CAN be spectated** (EU~AdODAirNs was 8/8 and decoded).
+- Rows have no framework data attached (production build), so only visible text can be matched.
+
+**2026-11-15 06:47 — first all-6-regions run.** 59 rooms listed; 4 rooms / 28 players live within 15 s, then the
+tool crashed on our side (Windows console couldn't print a room's error text → main loop died → guest contexts
+closed → every minter lost its CDP link). The error text was a Colyseus **ERROR frame (op 11)**:
+`0b cd 77 10 ad "onAuth failed"` = code **4215** (uint16 LE 0x1077), message `onAuth failed` — from INDIA~6zpx2M1LR:
+the room's onAuth rejected the guest seat (cause unknown yet: maybe a room rule, maybe seat timing). Also: the
+server list re-renders live, so a click can land on a neighbouring row ("asked EU~i5lLvx-e1, seat is EU~TNcuqiQk5")
+— harmless because seats are filed by the roomId in the seat URL.
+
+**2026-11-15 06:53 — ALL 6 REGIONS LIVE (5.5-min run, 6 guest minter tabs + 1 holder tab).** Ramp: 21 rooms/102
+players at 1.5 min → 34/155 → 42/201 → **peak 53 rooms / 255 players decoded live at the same time**, every region.
+Rooms closing with code **1000** after 1,500–4,300 patches = the match ending normally (re-minted if still listed).
+No decode errors after the DELETE fix. "No seat" leftovers: rows that re-rendered mid-click, TKO/PAR rooms not in
+the guest's list (`row=None`), some rows found but no seat in 8 s (to investigate). Known display bug: the "listed"
+total only grew (ended rooms never removed) → fixed to recount per region each refresh.
+
+**How to run it (2026-11-15):** debug Chrome on port 9222 open, then
+`python tools/liveall.py` (all regions, until Ctrl+C) · `--minutes 5` (timed) · `--regions eu,na` · `--one` (one
+room test). Output: `skin-library/public/rooms/live.json` (every live room, refreshed every 2 s: tag, region, mode,
+map, patches, players[rank, name, shortId, isBot, team, kills, deaths, score, health, shield, role, weaponSkin,
+pos xyz]) + per-room `public/rooms/<tag>.json` + **archive** `kirka.db` `match_roster` (each room once a minute).
+After today's test runs the archive held **1,389 roster rows, 98 matches, 234 distinct players**. Decode-error
+recordings go to `captures/liveall/`. Not covered yet: login-only rooms (ranked, TRAD), rooms missing from the
+guest's server list, and the op-13 telemetry (kill feed / loadouts) — the holder only queues state frames for now.
