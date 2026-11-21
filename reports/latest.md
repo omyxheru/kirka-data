@@ -1,24 +1,24 @@
 # Kirka daily report - 2026-11-21
 
-_Generated 07:10. Sources refreshed: archive, creators, feeds, shop, traders, collect, snapshot. Skipped: quests, maps, live._
+_Generated 12:56. Sources refreshed: archive, creators, feeds, shop, traders, collect, snapshot. Skipped: quests, maps, live._
 
 ## Players online
-- Now: **197** in game. Peak today: **212**.
-- Busiest region: **ASIA** (56).
+- Now: **196** in game. Peak today: **235**.
+- Busiest region: **EU** (74).
 
 ## Top players today
-1. **SLAUGHTERHOUSE** - 6,750
-2. **spirahl** - 5,620
-3. **pulseISgoo** - 4,400
-4. **Artur** - 3,855
-5. **Newbie** - 3,760
+1. **(FROST)LUST** - 97,505
+2. **-lYl-** - 77,825
+3. **Ichom** - 67,110
+4. **pulseISgoo** - 55,885
+5. **Licht** - 52,835
 
 ## Top clans today
-1. **Polaris** - 20,521,435
-2. **not_PRO9** - 12,892,855
-3. **PRO9** - 10,954,015
-4. **Squirt** - 7,439,120
-5. **|TheLords|** - 5,689,815
+1. **Polaris** - 20,989,290
+2. **not_PRO9** - 13,074,280
+3. **PRO9** - 11,194,585
+4. **Squirt** - 7,474,635
+5. **|TheLords|** - 5,695,625
 
 ## Shop
 - Sets: Comic (850), Blast (850)
