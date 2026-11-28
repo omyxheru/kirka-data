@@ -47,3 +47,4 @@
 2026-11-27 19:00  archive=ok  creators=ok  feeds=skip  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  live=skip  snapshot=ok
 2026-11-28 01:20  archive=ok  creators=ok  feeds=skip  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  live=skip  snapshot=ok
 2026-11-28 07:16  archive=ok  creators=ok  feeds=skip  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  live=skip  snapshot=ok
+2026-11-28 13:00  archive=ok  creators=ok  feeds=skip  shop=ok  quests=skip  maps=skip  traders=ok  collect=ok  live=skip  snapshot=ok
